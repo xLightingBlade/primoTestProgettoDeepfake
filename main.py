@@ -137,7 +137,7 @@ def pick_random_audio_from_test_folders_and_return_x_and_y_for_testing(number_of
     fake_files = os.listdir(f"{TEST_AUDIO_PATH}\\fake")
     real_files = os.listdir(f"{TEST_AUDIO_PATH}\\real")
     print("Picking new fake files")
-    for i in range(number_of_files_picked):
+    for j in range(number_of_files_picked):
         random_file = random.choice(fake_files)
         audio, sr = librosa.load(f"{TEST_AUDIO_PATH}\\fake\\{random_file}", sr=DEFAULT_SAMPLE_RATE)
         mfccs = librosa.feature.mfcc(y=audio, n_mfcc=13, n_fft=2048, hop_length=512)
@@ -145,7 +145,7 @@ def pick_random_audio_from_test_folders_and_return_x_and_y_for_testing(number_of
         test_data["label"].append(LABEL_FAKE)
 
     print("Picking new real files")
-    for i in range(number_of_files_picked):
+    for k in range(number_of_files_picked):
         random_file = random.choice(real_files)
         audio, sr = librosa.load(f"{TEST_AUDIO_PATH}\\real\\{random_file}", sr=DEFAULT_SAMPLE_RATE)
         mfccs = librosa.feature.mfcc(y=audio, n_mfcc=13, n_fft=2048, hop_length=512)
