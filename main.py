@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
-DATASET_PATH = "..\\training"
+DATASET_PATH = "..\\audio_data"
 JSON_PATH = "..\\data.json"
 DEFAULT_SAMPLE_RATE = 22050
 
