@@ -1,13 +1,13 @@
-import librosa
-import os
 import json
+import librosa
 import numpy as np
-from sklearn.model_selection import train_test_split
 import tensorflow as tf
 import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+import os
 
-DATASET_PATH = "..\\audio_data"
-JSON_PATH = "..\\data.json"
+DATASET_PATH = "audio_data"
+JSON_PATH = "data.json"
 DEFAULT_SAMPLE_RATE = 22050
 
 # valori per gli iperparametri
@@ -64,9 +64,10 @@ def load_input_and_target_data(json_path):
     return x, y
 
 
-def build_conv_model_demo(input_shape, loss="sparse_categorical_crossentropy", learning_rate=0.0001):
+def build_conv_model_demo(input_shape, loss="binary_crossentropy", learning_rate=0.0001):
     model = tf.keras.models.Sequential()
 
+    # reg. l2 assieme al dropout: studi mostrano come porta maggior riduzione della loss
     model.add(tf.keras.layers.Conv2D(64, (3, 3), activation='relu', input_shape=input_shape,
                                      kernel_regularizer=tf.keras.regularizers.l2(0.001)))
     model.add(tf.keras.layers.BatchNormalization())
@@ -86,7 +87,8 @@ def build_conv_model_demo(input_shape, loss="sparse_categorical_crossentropy", l
     model.add(tf.keras.layers.Dense(64, activation='relu'))
     tf.keras.layers.Dropout(0.3)
 
-    model.add(tf.keras.layers.Dense(10, activation='softmax'))
+    # sigmoide come act.funct. in uscita siccome è classificazione binaria
+    model.add(tf.keras.layers.Dense(units=1, activation='sigmoid'))
 
     optimiser = tf.optimizers.Adam(learning_rate=learning_rate)
 
@@ -99,7 +101,7 @@ def build_conv_model_demo(input_shape, loss="sparse_categorical_crossentropy", l
     return model
 
 
-def plot_history(history):
+def plot_history_and_save_plot_to_file(history, model_type):
     fig, axs = plt.subplots(2)
 
     # create accuracy subplot
@@ -117,27 +119,35 @@ def plot_history(history):
     axs[1].legend(loc="upper right")
     axs[1].set_title("Loss evaluation")
 
-    text = f"Learning rate of {LEARNING_RATE}, trained for {EPOCHS} epochs"
+    text = f"Learning rate of {LEARNING_RATE}, trained for {EPOCHS} epochs\n "
     plt.figtext(0.5, 0.01, text, wrap=True, horizontalalignment='center', fontsize=12)
+    plt.savefig(f"plots\\{model_type}_lr{LEARNING_RATE}_epochs{EPOCHS}.png")
     plt.show()
 
 
 def main():
-
     # prepare_dataset(DATASET_PATH, JSON_PATH)  #commentato, già eseguito una volta. TODO refactor
     x, y = load_input_and_target_data(JSON_PATH)
-    X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
+
+    X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42)
     X_val, X_test, y_val, y_test = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
     print(X_train.shape)
-    input_shape = (X_train.shape[1], X_train.shape[2], 1)  #(numsegmenti, 13, 1)
+    input_shape = (X_train.shape[1], X_train.shape[2], 1)  #(num_segmenti_audio, 13, 1)
+
     model = build_conv_model_demo(input_shape, learning_rate=LEARNING_RATE)
-    history = model.fit(X_train, y_train, epochs=EPOCHS, validation_data=(X_val, y_val), batch_size=BATCH_SIZE)
-    plot_history(history)
+
+    history = model.fit(X_train, y_train, epochs=EPOCHS,
+                        validation_data=(X_val, y_val), batch_size=BATCH_SIZE,
+                        callbacks=[tf.keras.callbacks.EarlyStopping(patience=2),
+                                   tf.keras.callbacks.ModelCheckpoint(
+                                       filepath=f"models\\model_cnn.keras",
+                                       monitor='val_loss', mode='min', save_best_only=True
+                                   )])
+
+    plot_history_and_save_plot_to_file(history, "cnn")
+
     test_loss, test_acc = model.evaluate(X_test, y_test)
     print("\nTest loss: {}, test accuracy: {}".format(test_loss, test_acc))
-
-    # save model
-    model.save("..\\model.keras")
 
 
 if __name__ == "__main__":
