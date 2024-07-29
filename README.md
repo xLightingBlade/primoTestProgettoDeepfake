@@ -1,4 +1,4 @@
-Primo scheletro del progetto di rilevamento audio deepfake.
+Primo scheletro del progetto di rilevamento audio deepfake.\
 Cartella audio_data: circa 11k file audio, divisi in fake e real. Tutti utilizzati per popolare il json dei dati. Usati anche per l'apprendimento, divisi in training, validation e test.\
 \
 Cartella test_audio_data: 1100 file audio non utilizzati in alcun punto del codice, provenienti dallo stesso dataset. Divisi in fake e real, al momento ne vengono prelevati 300 per classe per fare predizioni
