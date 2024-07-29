@@ -4,11 +4,15 @@ import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-import os
+import os, random
 
 DATASET_PATH = "audio_data"
+TEST_AUDIO_PATH = "test_audio_data"
 JSON_PATH = "data.json"
 DEFAULT_SAMPLE_RATE = 22050
+
+LABEL_FAKE = 1
+LABEL_REAL = 0
 
 # valori per gli iperparametri
 LEARNING_RATE = 0.0001
@@ -40,10 +44,10 @@ def prepare_dataset(dataset_path, json_path, number_of_mfcc=13, hop_length=512, 
                 #coefficienti (mfcc) della traccia audio
                 mfcc_list = librosa.feature.mfcc(y=audio_signal, n_mfcc=number_of_mfcc,
                                                  n_fft=n_fft, hop_length=hop_length)
-                mel_spectrogram = librosa.feature.melspectrogram(y=audio_signal, sr=DEFAULT_SAMPLE_RATE,
-                                                                 n_fft=n_fft, hop_length=hop_length)
+                # mel_spectrogram = librosa.feature.melspectrogram(y=audio_signal, sr=DEFAULT_SAMPLE_RATE,
+                #             n_fft=n_fft, hop_length=hop_length)
 
-                label = 0 if label_name == 'real' else 1
+                label = LABEL_REAL if label_name == 'real' else LABEL_FAKE
                 data["labels"].append(label)
                 #librosa restituisce gli mfcc come un array 2d, noi vorremmo 1d quindi facciamo la trasposta
                 data["mfcc"].append(mfcc_list.T.tolist())
@@ -102,7 +106,7 @@ def build_conv_model_demo(input_shape, loss="binary_crossentropy", learning_rate
 
 
 def plot_history_and_save_plot_to_file(history, model_type):
-    fig, axs = plt.subplots(2)
+    fig, axs = plt.subplots(1, 2)
 
     # create accuracy subplot
     axs[0].plot(history.history["accuracy"], label="accuracy")
@@ -125,17 +129,37 @@ def plot_history_and_save_plot_to_file(history, model_type):
     plt.show()
 
 
-def main():
-    # prepare_dataset(DATASET_PATH, JSON_PATH)  #commentato, già eseguito una volta. TODO refactor
-    x, y = load_input_and_target_data(JSON_PATH)
+def pick_random_audio_from_test_folders_and_return_x_and_y_for_testing(number_of_files_picked=300):
+    test_data = {
+        "mfcc": [],
+        "label": []
+    }
+    fake_files = os.listdir(f"{TEST_AUDIO_PATH}\\fake")
+    real_files = os.listdir(f"{TEST_AUDIO_PATH}\\real")
+    print("Picking new fake files")
+    for i in range(number_of_files_picked):
+        random_file = random.choice(fake_files)
+        audio, sr = librosa.load(f"{TEST_AUDIO_PATH}\\fake\\{random_file}", sr=DEFAULT_SAMPLE_RATE)
+        mfccs = librosa.feature.mfcc(y=audio, n_mfcc=13, n_fft=2048, hop_length=512)
+        test_data["mfcc"].append(mfccs.T.tolist())
+        test_data["label"].append(LABEL_FAKE)
 
-    X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42)
-    X_val, X_test, y_val, y_test = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
-    print(X_train.shape)
-    input_shape = (X_train.shape[1], X_train.shape[2], 1)  #(num_segmenti_audio, 13, 1)
+    print("Picking new real files")
+    for i in range(number_of_files_picked):
+        random_file = random.choice(real_files)
+        audio, sr = librosa.load(f"{TEST_AUDIO_PATH}\\real\\{random_file}", sr=DEFAULT_SAMPLE_RATE)
+        mfccs = librosa.feature.mfcc(y=audio, n_mfcc=13, n_fft=2048, hop_length=512)
+        test_data["mfcc"].append(mfccs.T.tolist())
+        test_data["label"].append(LABEL_REAL)
 
+        test_inputs = np.array(test_data["mfcc"])
+        test_targets = np.array(test_data["label"])
+        print("New test data created")
+        return test_inputs, test_targets
+
+
+def cnn_pipeline_from_build_to_test(input_shape, X_train, X_test, y_train, y_test, X_val, y_val):
     model = build_conv_model_demo(input_shape, learning_rate=LEARNING_RATE)
-
     history = model.fit(X_train, y_train, epochs=EPOCHS,
                         validation_data=(X_val, y_val), batch_size=BATCH_SIZE,
                         callbacks=[tf.keras.callbacks.EarlyStopping(patience=2),
@@ -144,10 +168,50 @@ def main():
                                        monitor='val_loss', mode='min', save_best_only=True
                                    )])
 
-    plot_history_and_save_plot_to_file(history, "cnn")
-
     test_loss, test_acc = model.evaluate(X_test, y_test)
     print("\nTest loss: {}, test accuracy: {}".format(test_loss, test_acc))
+    return history, test_loss, test_acc
+
+
+def plot_new_test_results_and_compare_to_old_evaluate(old_test_loss, new_test_loss, old_test_acc, new_test_acc,
+                                                      model_type):
+    fig, axs = plt.subplots(1, 2)
+    ax_0_bar = axs[0].bar(['old loss', 'new loss'], [old_test_loss, new_test_loss],
+                          label=['old loss', 'new loss'], color=['tab:green', 'tab:red'])
+    axs[0].set_ylabel('Loss comparison')
+    axs[0].bar_label(ax_0_bar)
+
+    ax_1_bar = axs[1].bar(['old acc', 'new acc'], [old_test_acc, new_test_acc],
+                          label=['old acc', 'new acc'], color=['tab:green', 'tab:red'])
+    axs[1].set_ylabel('Accuracy comparison')
+    axs[1].bar_label(ax_1_bar)
+
+    text = 'Loss and accuracy comparison of model on audio_data vs unseen new audio from same dataset'
+    plt.figtext(0.5, 0.01, text, wrap=True, horizontalalignment='center', fontsize=12)
+    plt.savefig(f"plots\\new_tests_{model_type}_lr{LEARNING_RATE}_epochs{EPOCHS}.png")
+    plt.show()
+
+
+def main():
+    # prepare_dataset(DATASET_PATH, JSON_PATH)  #commentato, già eseguito una volta. TODO refactor
+    x, y = load_input_and_target_data(JSON_PATH)
+
+    X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42)
+    X_val, X_test, y_val, y_test = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
+    print(X_train.shape)
+    # (num_segmenti_audio, 13 coefficienti, num canali(che è uno))
+    input_shape = (X_train.shape[1], X_train.shape[2], 1)
+    history, test_loss, test_acc = cnn_pipeline_from_build_to_test(input_shape, X_train, X_test, y_train, y_test, X_val,
+                                                                   y_val)
+
+    #un altro giro di evaluate su dati mai visti. Prelevati 300 di ognuno e etichettati per testare il modello
+    test_inputs, test_targets = pick_random_audio_from_test_folders_and_return_x_and_y_for_testing()
+    model = tf.keras.models.load_model("models\\model_cnn.keras")
+    new_test_loss, new_test_acc = model.evaluate(test_inputs, test_targets)
+    print("\nLoss su nuovi dati: {}, Accuracy su nuovi dati: {}".format(new_test_loss, new_test_acc))
+    plot_history_and_save_plot_to_file(history, "cnn")
+    plot_new_test_results_and_compare_to_old_evaluate(test_loss, new_test_loss, test_acc, new_test_acc,
+                                                      "cnn")
 
 
 if __name__ == "__main__":
